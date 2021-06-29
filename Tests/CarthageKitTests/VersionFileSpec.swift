@@ -50,6 +50,8 @@ class VersionFileSpec: QuickSpec {
 
 		it("should write and read back a version file correctly") {
 			let framework = CachedFramework(name: "TestFramework",
+							container: nil,
+							libraryIdentifier: nil,
 							hash: "TestHASH",
 							linking: .dynamic,
 							swiftToolchainVersion: "4.2 (swiftlang-1000.11.37.1 clang-1000.11.45.1)")
@@ -124,9 +126,9 @@ class VersionFileSpec: QuickSpec {
 			expect(iosFramework["swiftToolchainVersion"]) == "4.2 (swiftlang-1000.11.37.1 clang-1000.11.45.1)"
 		}
 
-		func validate(file: VersionFile, matches: Bool, platform: Platform, commitish: String, hashes: [String?],
+		func validate(file: VersionFile, matches: Bool, platform: String, commitish: String, hashes: [String?],
 		              swiftVersionMatches: [Bool], fileName: FileString = #file, line: UInt = #line) {
-			_ = file.satisfies(platform: platform, commitish: commitish, hashes: hashes, swiftVersionMatches: swiftVersionMatches)
+			_ = file.satisfies(platform: SDK(rawValue: platform)!, commitish: commitish, hashes: hashes, swiftVersionMatches: swiftVersionMatches)
 				.on(value: { didMatch in
 					expect(didMatch, file: fileName, line: line) == matches
 				})
@@ -139,37 +141,37 @@ class VersionFileSpec: QuickSpec {
 
 			// Everything matches
 			validate(
-				file: versionFile, matches: true, platform: .iOS,
+				file: versionFile, matches: true, platform: "iphoneos",
 				commitish: "v1.0", hashes: ["ios-framework1-hash", "ios-framework2-hash"], swiftVersionMatches: [true, true]
 			)
 
 			// One framework missing
 			validate(
-				file: versionFile, matches: false, platform: .iOS,
+				file: versionFile, matches: false, platform: "iphoneos",
 				commitish: "v1.0", hashes: ["ios-framework1-hash", nil], swiftVersionMatches: [true, true]
 			)
 
 			// One Swift version mismatch
 			validate(
-				file: versionFile, matches: false, platform: .iOS,
+				file: versionFile, matches: false, platform: "iphoneos",
 				commitish: "v1.0", hashes: ["ios-framework1-hash", "ios-framework2-hash"], swiftVersionMatches: [true, false]
 			)
 
 			// Mismatched commitish
 			validate(
-				file: versionFile, matches: false, platform: .iOS,
+				file: versionFile, matches: false, platform: "iphoneos",
 				commitish: "v1.1", hashes: ["ios-framework1-hash", "ios-framework2-hash"], swiftVersionMatches: [true, true]
 			)
 
 			// Version file has empty array for platform
 			validate(
-				file: versionFile, matches: true, platform: .tvOS,
+				file: versionFile, matches: true, platform: "tvos",
 				commitish: "v1.0", hashes: [nil, nil], swiftVersionMatches: [true, true]
 			)
 
 			// Version file has no entry for platform, should match
 			validate(
-				file: versionFile, matches: false, platform: .watchOS,
+				file: versionFile, matches: false, platform: "watchOS",
 				commitish: "v1.0", hashes: [nil, nil], swiftVersionMatches: [true, true]
 			)
 		}
@@ -188,7 +190,7 @@ class VersionFileSpec: QuickSpec {
 			
 			let versionFile: VersionFile! = try? JSONDecoder().decode(VersionFile.self, from: jsonData)
 			validate(
-				file: versionFile, matches: true, platform: .iOS,
+				file: versionFile, matches: true, platform: "iphoneos",
 				commitish: "v1.0", hashes: ["TestHASH"], swiftVersionMatches: [true]
 			)
 		}
@@ -196,19 +198,34 @@ class VersionFileSpec: QuickSpec {
 		it("should compute the relative paths of static and dynamic frameworks") {
 			let dynamicFramework = CachedFramework(
 				name: "TestFramework",
+				container: nil,
+				libraryIdentifier: nil,
 				hash: "TestHASH",
 				linking: .dynamic,
 				swiftToolchainVersion: "4.2 (swiftlang-1000.11.37.1 clang-1000.11.45.1)"
 			)
 			let staticFramework = CachedFramework(
 				name: "TestFramework",
+				container: nil,
+				libraryIdentifier: nil,
 				hash: "TestHASH",
 				linking: .static,
 				swiftToolchainVersion: "4.2 (swiftlang-1000.11.37.1 clang-1000.11.45.1)"
 			)
+			let xcframeworkFramework = CachedFramework(
+				name: "TestFramework",
+				container: "TestFramework.xcframework",
+				libraryIdentifier: "ios-arm64_x86_64-simulator",
+				hash: "TestHASH",
+				linking: nil,
+				swiftToolchainVersion: "5.3 (swiftlang-1200.0.29.2 clang-1200.0.30.1)"
+			)
+			let buildDirectory = URL(fileURLWithPath: "/TestBuild")
 
-			expect(dynamicFramework.relativePath) == "TestFramework.framework"
-			expect(staticFramework.relativePath) == "Static/TestFramework.framework"
+			expect(dynamicFramework.location(in: buildDirectory, sdk: .iOS).path) == "/TestBuild/iOS/TestFramework.framework"
+			expect(staticFramework.location(in: buildDirectory, sdk: .iOS).path) == "/TestBuild/iOS/Static/TestFramework.framework"
+			expect(xcframeworkFramework.location(in: buildDirectory, sdk: .iOS).path) ==
+				"/TestBuild/TestFramework.xcframework/ios-arm64_x86_64-simulator/TestFramework.framework"
 		}
 	}
 }
